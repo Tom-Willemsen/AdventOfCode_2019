@@ -1,0 +1,21 @@
+[package]
+name = "advent-of-code-2019"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+ahash = { version = "*" }
+rayon = { version = "1" }
+ndarray = { version = "*", features = ["rayon"] }
+modinverse = { version = "*" }
+bitvec = { version = "1" }
+cached = { version = "*", features = ["ahash", "proc_macro"] }
+mimalloc = { version = "*" }
+itertools = { version = "*" }
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
+debug = true
