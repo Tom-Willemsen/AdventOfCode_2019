@@ -1,5 +1,4 @@
 use clap::Parser;
-use itertools::Itertools;
 use std::fs;
 
 #[derive(Parser)]
@@ -16,41 +15,55 @@ fn parse(raw_inp: &str) -> (u32, u32) {
         .expect("invalid format")
 }
 
-fn p1_is_valid(bytes: &[u8; 6]) -> bool {
-    bytes.iter().tuple_windows().all(|(x, y)| y >= x)
-        && bytes.iter().tuple_windows().any(|(x, y)| x == y)
-}
-
-fn p2_is_valid(bytes: &[u8; 6]) -> bool {
+/// returns (p1_valid, p2_valid)
+fn is_valid(bytes: &[u32; 6]) -> (bool, bool) {
     let mut arr: [u8; 10] = [0; 10];
 
     bytes.iter().for_each(|&b| {
-        arr[usize::from(b)] += 1;
+        arr[usize::try_from(b).unwrap()] += 1;
     });
 
-    arr.contains(&2)
+    // 2 or more of the same number -> p1 is valid
+    // *exactly* 2 of the same number -> p2 is valid
+    (arr.iter().any(|&x| x >= 2), arr.contains(&2))
 }
 
-fn to_bytes(n: u32) -> [u8; 6] {
-    [
-        ((n / 100_000) % 10) as u8,
-        ((n / 10_000) % 10) as u8,
-        ((n / 1_000) % 10) as u8,
-        ((n / 100) % 10) as u8,
-        ((n / 10) % 10) as u8,
-        (n % 10) as u8,
-    ]
+fn to_num(b1: u32, b2: u32, b3: u32, b4: u32, b5: u32, b6: u32) -> u32 {
+    100_000 * b1 + 10_000 * b2 + 1000 * b3 + 100 * b4 + 10 * b5 + b6
 }
 
-fn calculate(start: u32, end: u32) -> (usize, usize) {
+fn calculate(start: u32, end: u32) -> (u32, u32) {
     let mut p1 = 0;
     let mut p2 = 0;
-    for n in start..=end {
-        let b = to_bytes(n);
-        if p1_is_valid(&b) {
-            p1 += 1;
-            if p2_is_valid(&b) {
-                p2 += 1;
+
+    let b1_start = (start / 100_000) % 10;
+    let b1_end = (end / 100_000) % 10;
+
+    // Messy, but a lot faster than the naive guess-and-check approach.
+    // This enforces the non-decreasing digits rule
+    for b1 in b1_start..=b1_end {
+        for b2 in b1..=9 {
+            for b3 in b2..=9 {
+                for b4 in b3..=9 {
+                    for b5 in b4..=9 {
+                        for b6 in b5..=9 {
+                            let n = to_num(b1, b2, b3, b4, b5, b6);
+                            if n > end {
+                                return (p1, p2);
+                            }
+                            if n >= start {
+                                let (p1_is_valid, p2_is_valid) =
+                                    is_valid(&[b1, b2, b3, b4, b5, b6]);
+                                if p1_is_valid {
+                                    p1 += 1;
+                                }
+                                if p2_is_valid {
+                                    p2 += 1;
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
