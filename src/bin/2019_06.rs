@@ -1,6 +1,6 @@
+use ahash::AHashMap;
 use clap::Parser;
 use std::fs;
-use ahash::{AHashMap, AHashSet};
 
 #[derive(Parser)]
 struct Cli {
@@ -16,33 +16,43 @@ fn parse(raw_inp: &str) -> Vec<(&str, &str)> {
         .collect()
 }
 
-// TODO: do better.
 fn calculate_p1(data: &[(&str, &str)]) -> usize {
-    let mut orbits: AHashMap<&str, usize> = AHashMap::with_capacity(data.len()+1);
-    
-    let mut unassigned: AHashSet<(&str, &str)> = data.iter().copied().collect();
-    
-    orbits.insert("COM", 0);
-    
-    while unassigned.len() != 0 {
-        for (orbited, body) in unassigned.iter() {
-            if let Some(oc) = orbits.get(orbited) {
-                orbits.insert(body, oc + 1);
+    let mut orbits: AHashMap<&str, usize> = AHashMap::with_capacity(data.len() + 1);
+
+    let mut dependents: AHashMap<&str, Vec<&str>> = AHashMap::with_capacity(data.len() + 1);
+
+    data.iter().for_each(|(orbited, body)| {
+        dependents
+            .entry(orbited)
+            .and_modify(|v| v.push(body))
+            .or_insert(vec![body]);
+    });
+
+    let mut next = vec!["COM"];
+    let mut depth = 0;
+
+    while orbits.len() < data.len() + 1 {
+        let current = next.clone();
+        next.clear();
+        for item in current {
+            orbits.insert(item, depth);
+            if let Some(deps) = dependents.get(item) {
+                next.extend(deps);
             }
         }
-        
-        unassigned.retain(|&(_, body)| !orbits.contains_key(body));
+        depth += 1;
     }
-    
+
     orbits.values().sum()
 }
 
 fn calculate_p2(data: &[(&str, &str)]) -> usize {
-    let mut ancestors: AHashMap<&str, &str> = AHashMap::with_capacity(data.len());
-    data.iter()
-        .for_each(|&(k, v)| { ancestors.insert(v, k); } );
+    let mut ancestors: AHashMap<&str, &str> = AHashMap::with_capacity(data.len() + 1);
+    data.iter().for_each(|&(k, v)| {
+        ancestors.insert(v, k);
+    });
 
-    let mut san_ancestors: AHashMap<&str, usize> = AHashMap::with_capacity(data.len());
+    let mut san_ancestors: AHashMap<&str, usize> = AHashMap::with_capacity(data.len() + 1);
     let mut depth = 0;
     let mut ancestor = ancestors.get("SAN").expect("santa doesn't exist :(");
     while ancestor != &"COM" {
@@ -61,9 +71,7 @@ fn calculate_p2(data: &[(&str, &str)]) -> usize {
         depth += 1;
     }
 
-
     panic!("no solution found");
-
 }
 
 fn main() {
@@ -106,7 +114,7 @@ J)K
 K)L
 K)YOU
 I)SAN";
-    
+
     const REAL_DATA: &str = include_str!("../../inputs/real/2019_06");
 
     #[test]
@@ -123,7 +131,7 @@ I)SAN";
     fn test_p1_real() {
         assert_eq!(calculate_p1(&parse(REAL_DATA)), 312697);
     }
-    
+
     #[test]
     fn test_p2_real() {
         assert_eq!(calculate_p2(&parse(REAL_DATA)), 466);

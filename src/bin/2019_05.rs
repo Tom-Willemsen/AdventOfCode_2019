@@ -48,7 +48,7 @@ mod tests {
 
     #[test]
     fn test_large_example() {
-        for (val, expected) in [(7, 999), (8,1000), (9, 1001)] {
+        for (val, expected) in [(7, 999), (8, 1000), (9, 1001)] {
             let mut prog: IntCodeState = parse(&EXAMPLE_DATA).into();
             prog.execute_until_halt(|| Some(val));
             assert_eq!(prog.out_buffer.pop_front(), Some(expected));
@@ -59,7 +59,7 @@ mod tests {
     fn test_p2_example() {
         assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA)), 999);
     }
-    
+
     #[test]
     fn test_p1_real() {
         assert_eq!(calculate_p1(&parse(&REAL_DATA)), 13294380);
@@ -69,5 +69,4 @@ mod tests {
     fn test_p2_real() {
         assert_eq!(calculate_p2(&parse(&REAL_DATA)), 11460760);
     }
-
 }
