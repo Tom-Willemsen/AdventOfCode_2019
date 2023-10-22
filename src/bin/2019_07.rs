@@ -20,7 +20,7 @@ fn parse(raw_inp: &str) -> Vec<i64> {
 fn run_amplifier_p1(software: &[i64], input: i64, phase: i64) -> i64 {
     let mut prog: IntCodeState = software.into();
     let mut inputs = vec![input, phase];
-    prog.execute_until_halt(|| inputs.pop());
+    prog.execute_until_halt(|_| inputs.pop());
     prog.out_buffer.pop_back().unwrap()
 }
 
@@ -54,11 +54,11 @@ fn run_amplifiers_p2(software: &[i64], phases: &[i64]) -> i64 {
     let mut a5_inputs = vec![phases[4]];
 
     loop {
-        amp1.execute_single_step(|| a1_inputs.pop().or(amp5.out_buffer.pop_front()));
-        amp2.execute_single_step(|| a2_inputs.pop().or(amp1.out_buffer.pop_front()));
-        amp3.execute_single_step(|| a3_inputs.pop().or(amp2.out_buffer.pop_front()));
-        amp4.execute_single_step(|| a4_inputs.pop().or(amp3.out_buffer.pop_front()));
-        let halt = amp5.execute_single_step(|| a5_inputs.pop().or(amp4.out_buffer.pop_front()));
+        amp1.execute_single_step(|_| a1_inputs.pop().or(amp5.out_buffer.pop_front()));
+        amp2.execute_single_step(|_| a2_inputs.pop().or(amp1.out_buffer.pop_front()));
+        amp3.execute_single_step(|_| a3_inputs.pop().or(amp2.out_buffer.pop_front()));
+        amp4.execute_single_step(|_| a4_inputs.pop().or(amp3.out_buffer.pop_front()));
+        let halt = amp5.execute_single_step(|_| a5_inputs.pop().or(amp4.out_buffer.pop_front()));
 
         if halt {
             break;

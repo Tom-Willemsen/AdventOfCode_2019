@@ -18,13 +18,13 @@ fn parse(raw_inp: &str) -> Vec<i64> {
 
 fn calculate_p1(nums: &[i64]) -> i64 {
     let mut prog: IntCodeState = nums.into();
-    prog.execute_until_halt(|| Some(1));
+    prog.execute_until_halt(|_| Some(1));
     prog.out_buffer.pop_back().unwrap()
 }
 
 fn calculate_p2(nums: &[i64]) -> i64 {
     let mut prog: IntCodeState = nums.into();
-    prog.execute_until_halt(|| Some(5));
+    prog.execute_until_halt(|_| Some(5));
     prog.out_buffer.pop_back().unwrap()
 }
 
@@ -50,7 +50,7 @@ mod tests {
     fn test_large_example() {
         for (val, expected) in [(7, 999), (8, 1000), (9, 1001)] {
             let mut prog: IntCodeState = parse(&EXAMPLE_DATA).into();
-            prog.execute_until_halt(|| Some(val));
+            prog.execute_until_halt(|_| Some(val));
             assert_eq!(prog.out_buffer.pop_front(), Some(expected));
         }
     }

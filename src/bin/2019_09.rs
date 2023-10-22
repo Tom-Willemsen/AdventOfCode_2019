@@ -18,7 +18,7 @@ fn parse(raw_inp: &str) -> Vec<i64> {
 
 fn calculate<const MODE: i64>(software: &[i64]) -> i64 {
     let mut prog: IntCodeState = software.into();
-    prog.execute_until_halt(|| Some(MODE));
+    prog.execute_until_halt(|_| Some(MODE));
     prog.out_buffer.pop_back().unwrap()
 }
 
@@ -38,12 +38,12 @@ mod tests {
     use super::*;
 
     const REAL_DATA: &str = include_str!("../../inputs/real/2019_09");
-    
+
     #[test]
     fn test_p1_real() {
         assert_eq!(calculate::<1>(&parse(&REAL_DATA)), 3345854957);
     }
-    
+
     #[test]
     fn test_p2_real() {
         assert_eq!(calculate::<2>(&parse(&REAL_DATA)), 68938);
