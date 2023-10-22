@@ -63,7 +63,7 @@ mod tests {
         let mut prog: IntCodeState = inp.into();
         prog.execute_until_halt_no_input();
         for (idx, mem) in out.iter().enumerate() {
-            assert_eq!(prog.get_mem(idx), *mem);
+            assert_eq!(prog.get_mem(idx as i64), *mem);
         }
     }
 

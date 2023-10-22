@@ -10,10 +10,8 @@ rayon = { version = "1" }
 ndarray = { version = "*", features = ["rayon"] }
 modinverse = { version = "*" }
 bitvec = { version = "1" }
-cached = { version = "*", features = ["ahash", "proc_macro"] }
 mimalloc = { version = "*" }
 itertools = { version = "*" }
-const_format = { version = "*" }
 
 [profile.release]
 codegen-units = 1
