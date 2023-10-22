@@ -1,9 +1,9 @@
 use clap::Parser;
 use ndarray::{Array2, Zip};
 use num::integer::gcd;
+use rayon::prelude::*;
 use std::f64::consts::PI;
 use std::fs;
-use rayon::prelude::*;
 
 #[derive(Parser)]
 struct Cli {
@@ -71,7 +71,8 @@ fn count_visible(monitor_y: usize, monitor_x: usize, data: &Array2<bool>) -> usi
 }
 
 fn calculate_p1(data: &Array2<bool>) -> (usize, usize, usize) {
-    Zip::indexed(data).into_par_iter()
+    Zip::indexed(data)
+        .into_par_iter()
         .filter(|&(_, &item)| item)
         .map(|((y, x), _)| (y, x, count_visible(y, x, data)))
         .max_by_key(|x| x.2)
@@ -84,7 +85,11 @@ fn angle_to(base_y: usize, base_x: usize, y: usize, x: usize) -> f64 {
     (0.5 * PI + yd.atan2(xd)).rem_euclid(2. * PI)
 }
 
-fn calculate_p2<const ASTEROID: usize>(mut data: Array2<bool>, monitor_y: usize, monitor_x: usize) -> usize {
+fn calculate_p2<const ASTEROID: usize>(
+    mut data: Array2<bool>,
+    monitor_y: usize,
+    monitor_x: usize,
+) -> usize {
     let mut destroyed = 0;
 
     loop {
