@@ -12,6 +12,7 @@ modinverse = { version = "*" }
 bitvec = { version = "1" }
 mimalloc = { version = "*" }
 itertools = { version = "*" }
+num = { version = "*" }
 
 [profile.release]
 codegen-units = 1
