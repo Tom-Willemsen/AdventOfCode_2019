@@ -4,7 +4,7 @@ use std::collections::VecDeque;
 
 /// Minimum amount of memory to store in array rather than hashmap
 /// Can be more if the provided program is longer.
-const LOW_MEM_AMOUNT: usize = 2048;
+const LOW_MEM_AMOUNT: usize = 4096;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
 pub struct IntCodeState {
@@ -18,7 +18,7 @@ pub struct IntCodeState {
 impl From<&[i64]> for IntCodeState {
     fn from(item: &[i64]) -> Self {
         let mut low_mem = item.to_vec();
-        low_mem.extend(vec![0; max(0, LOW_MEM_AMOUNT - low_mem.len())]);
+        low_mem.extend(vec![0; LOW_MEM_AMOUNT.saturating_sub(low_mem.len())]);
         IntCodeState {
             instruction_ptr: 0,
             base_ptr: 0,
