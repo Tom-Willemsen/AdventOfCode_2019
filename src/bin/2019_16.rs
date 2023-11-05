@@ -1,5 +1,6 @@
 use clap::Parser;
 use itertools::Itertools;
+use rayon::prelude::*;
 use std::fs;
 
 #[derive(Parser)]
@@ -33,15 +34,42 @@ fn pat(offset: usize, pos: usize) -> i64 {
     }
 }
 
-fn apply_phase(data: &[i64]) -> Vec<i64> {
+fn apply_phase_p1(data: &[i64]) -> Vec<i64> {
     (0..data.len())
         .map(|i| {
             data.iter()
                 .enumerate()
-                .map(|(j, &m)| pat(i, j) * m)
+                .map(|(j, &m)| m * pat(i, j))
                 .sum::<i64>()
                 .abs()
                 % 10
+        })
+        .collect()
+}
+
+/// ASSUMPTION: skip > len/2
+/// So mask is skip 0s followed by all 1s
+/// So a simple cumulative sum starting at first 1
+/// can be used as a shortcut
+fn apply_phase_p2(data: &[i64]) -> Vec<i64> {
+    let mut cumsum = vec![];
+    let mut total_sum = 0;
+
+    data.iter().for_each(|x| {
+        total_sum += x;
+        cumsum.push(total_sum);
+    });
+
+    (0..data.len())
+        .into_par_iter()
+        .map(|i| {
+            let sum_to_i = if i >= 1 {
+                *cumsum.get(i - 1).unwrap()
+            } else {
+                0
+            };
+
+            (total_sum - sum_to_i).abs() % 10
         })
         .collect()
 }
@@ -50,38 +78,37 @@ fn calculate_p1(data: &[i64]) -> String {
     let mut data = data.to_vec();
 
     for _ in 0..100 {
-        data = apply_phase(&data);
+        data = apply_phase_p1(&data);
     }
 
     data.iter().take(8).map(|x| x.to_string()).join("")
 }
 
 fn calculate_p2(data: &[i64]) -> String {
-    let mut real_signal = Vec::with_capacity(data.len() * 10000);
+    let skip = usize::try_from(
+        data[6]
+            + data[5] * 10
+            + data[4] * 100
+            + data[3] * 1000
+            + data[2] * 10000
+            + data[1] * 100000
+            + data[0] * 1000000,
+    )
+    .unwrap();
 
-    for _ in 0..10000 {
-        real_signal.extend(data);
+    let mut real_data = vec![];
+
+    for _ in 0..(data.len() * 10000 - skip).div_ceil(data.len()) {
+        real_data.extend(data);
     }
 
-    for phase in 0..100 {
-        println!("p2 phase {}", phase);
-        real_signal = apply_phase(&real_signal);
+    real_data = real_data[skip % data.len()..].to_vec();
+
+    for _ in 0..100 {
+        real_data = apply_phase_p2(&real_data);
     }
 
-    let skip = data[6]
-        + data[5] * 10
-        + data[4] * 100
-        + data[3] * 1000
-        + data[2] * 10000
-        + data[1] * 100000
-        + data[0] * 1000000;
-
-    real_signal
-        .iter()
-        .skip(usize::try_from(skip).unwrap())
-        .take(8)
-        .map(|x| x.to_string())
-        .join("")
+    real_data.iter().take(8).map(|x| x.to_string()).join("")
 }
 
 fn main() {
@@ -147,16 +174,16 @@ mod tests {
     fn test_p1_simple_example() {
         let data = parse(&SIMPLE_EXAMPLE).to_vec();
 
-        let p1 = apply_phase(&data);
+        let p1 = apply_phase_p1(&data);
         assert_eq!(p1, vec![4, 8, 2, 2, 6, 1, 5, 8]);
 
-        let p2 = apply_phase(&p1);
+        let p2 = apply_phase_p1(&p1);
         assert_eq!(p2, vec![3, 4, 0, 4, 0, 4, 3, 8]);
 
-        let p3 = apply_phase(&p2);
+        let p3 = apply_phase_p1(&p2);
         assert_eq!(p3, vec![0, 3, 4, 1, 5, 5, 1, 8]);
 
-        let p4 = apply_phase(&p3);
+        let p4 = apply_phase_p1(&p3);
         assert_eq!(p4, vec![0, 1, 0, 2, 9, 4, 9, 8]);
     }
 
@@ -180,23 +207,23 @@ mod tests {
         assert_eq!(calculate_p1(&parse(&REAL_DATA)), "23135243");
     }
 
-    //     #[test]
-    //     fn test_p2_example_1() {
-    //         assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_4)), "84462026");
-    //     }
-    //
-    //     #[test]
-    //     fn test_p2_example_2() {
-    //         assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_5)), "78725270");
-    //     }
-    //
-    //     #[test]
-    //     fn test_p2_example_3() {
-    //         assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_6)), "53553731");
-    //     }
-    //
-    //     #[test]
-    //     fn test_p2_real() {
-    //         assert!(calculate_p2(&parse(&REAL_DATA)) != "23135243");  // too high
-    //     }
+    #[test]
+    fn test_p2_example_1() {
+        assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_4)), "84462026");
+    }
+
+    #[test]
+    fn test_p2_example_2() {
+        assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_5)), "78725270");
+    }
+
+    #[test]
+    fn test_p2_example_3() {
+        assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_6)), "53553731");
+    }
+
+    #[test]
+    fn test_p2_real() {
+        assert_eq!(calculate_p2(&parse(&REAL_DATA)), "21130597");
+    }
 }
