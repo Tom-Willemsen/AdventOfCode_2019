@@ -197,10 +197,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let (p1, p2) = rayon::join(
-        || calculate_p1(&data),
-        || calculate_p2(data.clone()),
-    );
+    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(data.clone()));
     println!("{}\n{}", p1, p2);
 }
 
