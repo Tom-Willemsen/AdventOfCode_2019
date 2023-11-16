@@ -95,22 +95,18 @@ impl IntCodeState {
         if address_absolute < self.low_memory.len() as i64 {
             self.low_memory[usize::try_from(address_absolute).expect("can't make usize")] = new;
         } else {
-            self.high_memory
-                .entry(address_absolute)
-                .and_modify(|x| *x = new)
-                .or_insert(new);
+            self.high_memory.insert(address_absolute, new);
         }
     }
 
     #[inline]
     fn get_parameter(&self, mode: i64, offset: i64) -> i64 {
+        let pos = self.get_mem(self.instruction_ptr + offset);
         if mode == 0 {
-            let pos = self.get_mem(self.instruction_ptr + offset);
             self.get_mem(pos)
         } else if mode == 1 {
-            self.get_mem(self.instruction_ptr + offset)
+            pos
         } else if mode == 2 {
-            let pos = self.get_mem(self.instruction_ptr + offset);
             self.get_mem(self.base_ptr + pos)
         } else {
             panic!("unexpected mode {:?}", mode)
@@ -119,13 +115,12 @@ impl IntCodeState {
 
     #[inline]
     fn set_parameter(&mut self, mode: i64, offset: i64, value: i64) {
+        let pos = self.get_mem(self.instruction_ptr + offset);
         if mode == 0 {
-            let pos = self.get_mem(self.instruction_ptr + offset);
             self.set_mem(pos, value)
         } else if mode == 1 {
             panic!("can't set parameter in immediate mode!")
         } else if mode == 2 {
-            let pos = self.get_mem(self.instruction_ptr + offset);
             self.set_mem(self.base_ptr + pos, value)
         } else {
             panic!("unexpected mode {:?}", mode)
