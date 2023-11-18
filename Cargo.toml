@@ -9,6 +9,7 @@ ahash = { version = "*" }
 rayon = { version = "1" }
 ndarray = { version = "*", features = ["rayon"] }
 modinverse = { version = "*" }
+mod_exp = { version = "*" }
 bitvec = { version = "1" }
 mimalloc = { version = "*" }
 itertools = { version = "*" }

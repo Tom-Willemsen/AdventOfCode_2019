@@ -73,17 +73,15 @@ fn calculate<const PART: u8>(software: &[i64]) -> i64 {
             }
         }
 
-        if PART == 2
-            && all_waiting_for_input
-            && nat_y.is_some()
-            && input_buffers.iter().all(|b| b.is_empty())
-        {
-            if nat_y == last_nat_y {
-                return nat_y.expect("nat has no packet");
+        if PART == 2 && all_waiting_for_input && input_buffers.iter().all(|b| b.is_empty()) {
+            if let Some(nat_y) = nat_y {
+                if Some(nat_y) == last_nat_y {
+                    return nat_y;
+                }
+                input_buffers[0].push_back(nat_x.expect("nat has no packet"));
+                input_buffers[0].push_back(nat_y);
+                last_nat_y = Some(nat_y);
             }
-            input_buffers[0].push_back(nat_x.expect("nat has no packet"));
-            input_buffers[0].push_back(nat_y.expect("nat has no packet"));
-            last_nat_y = nat_y;
         }
     }
 }
