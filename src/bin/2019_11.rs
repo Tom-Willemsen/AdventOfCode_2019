@@ -1,27 +1,13 @@
 use advent_of_code_2019::intcode::IntCodeState;
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
 use itertools::Itertools;
 use std::fs;
 
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
-
 const DIRS: [(i64, i64); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
-fn paint<const INITIAL_TILE: bool>(software: &[i64]) -> AHashMap<(i64, i64), bool> {
-    let mut prog: IntCodeState = software.into();
+fn paint<const INITIAL_TILE: bool>(software: &str) -> AHashMap<(i64, i64), bool> {
+    let mut prog: IntCodeState<2048> = software.into();
 
     let mut painted: AHashMap<(i64, i64), bool> = AHashMap::default();
 
@@ -58,12 +44,12 @@ fn paint<const INITIAL_TILE: bool>(software: &[i64]) -> AHashMap<(i64, i64), boo
     painted
 }
 
-fn calculate_p1(software: &[i64]) -> usize {
+fn calculate_p1(software: &str) -> usize {
     let painted = paint::<false>(software);
     painted.len()
 }
 
-fn calculate_p2(software: &[i64]) -> String {
+fn calculate_p2(software: &str) -> String {
     let painted = paint::<true>(software);
 
     let (min_x, max_x) = painted.keys().map(|p| p.0).minmax().into_option().unwrap();
@@ -90,9 +76,8 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let nums: Vec<i64> = parse(&inp);
-    let p1 = calculate_p1(&nums);
-    let p2 = calculate_p2(&nums);
+    let p1 = calculate_p1(&inp);
+    let p2 = calculate_p2(&inp);
     println!("{}\n{}", p1, p2);
 }
 
@@ -104,13 +89,13 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate_p1(&parse(&REAL_DATA)), 1967);
+        assert_eq!(calculate_p1(&REAL_DATA), 1967);
     }
 
     #[test]
     fn test_p2_real() {
         assert_eq!(
-            calculate_p2(&parse(&REAL_DATA)).trim(),
+            calculate_p2(&REAL_DATA).trim(),
             "
  █  █ ███  █  █ ████  ██  ████ ███  █  █   
  █ █  █  █ █  █ █    █  █    █ █  █ █ █    

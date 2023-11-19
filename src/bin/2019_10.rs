@@ -1,15 +1,9 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use ndarray::{Array2, Zip};
 use num::integer::gcd;
 use rayon::prelude::*;
 use std::f64::consts::PI;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Array2<bool> {
     let vec = raw_inp
@@ -110,12 +104,12 @@ fn calculate_p2<const ASTEROID: usize>(
             destroyed += visible.len();
             visible.iter().for_each(|&(y, x)| data[(y, x)] = false);
         } else {
-            visible.sort_unstable_by(|&(y1, x1), &(y2, x2)| {
-                let t1 = angle_to(monitor_y, monitor_x, y1, x1);
-                let t2 = angle_to(monitor_y, monitor_x, y2, x2);
-                t1.partial_cmp(&t2).expect("should not have NaNs")
-            });
-            let coord = visible[ASTEROID - destroyed - 1];
+            let (_, coord, _) =
+                visible.select_nth_unstable_by(ASTEROID - destroyed - 1, |&(y1, x1), &(y2, x2)| {
+                    let t1 = angle_to(monitor_y, monitor_x, y1, x1);
+                    let t2 = angle_to(monitor_y, monitor_x, y2, x2);
+                    t1.partial_cmp(&t2).expect("should not have NaNs")
+                });
             return 100 * coord.1 + coord.0;
         }
     }

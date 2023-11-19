@@ -1,18 +1,13 @@
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
 use mimalloc::MiMalloc;
 use ndarray::{s, Array2, ArrayView2};
 use std::collections::BinaryHeap;
 use std::fs;
+use std::cmp::min;
 
 #[global_allocator]
 static ALLOCATOR: MiMalloc = MiMalloc;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     let columns = raw_inp
@@ -31,6 +26,7 @@ fn parse(raw_inp: &str) -> Array2<u8> {
 
 const DIRS: [(isize, isize); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
 
+#[inline(never)]
 fn position_of(data: &ArrayView2<u8>, ch: u8) -> (usize, usize) {
     data.indexed_iter()
         .filter(|(_, &itm)| itm == ch)
@@ -50,11 +46,6 @@ fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<
     let mut result = vec![];
 
     while let Some((cost, pos)) = heap.pop() {
-        // Not needed - no loops in input data.
-        // if cost < *costs.get(&pos).unwrap_or(&i64::MIN) {
-        //     continue;
-        // }
-
         for dir in DIRS {
             let next_pos = (
                 pos.0.checked_add_signed(dir.0).unwrap(),
@@ -104,8 +95,14 @@ fn recursive_best_path<const AGENTS: usize>(
     positions: &[u8; AGENTS],
     cache: &mut PathCache<AGENTS>,
     dijkstra_cache: &mut DijkstraCache,
+    best_cost: &mut i64,
 ) -> i64 {
-    (0..AGENTS)
+    
+    if cost_so_far >= *best_cost {
+        return i64::MAX - cost_so_far;
+    }
+    
+    let result = (0..AGENTS)
         .filter_map(|agent| {
             let pos = positions[agent];
 
@@ -134,6 +131,7 @@ fn recursive_best_path<const AGENTS: usize>(
                                 &new_positions,
                                 cache,
                                 dijkstra_cache,
+                                best_cost,
                             );
                             let additional_cost = result - base_cost;
                             cache.insert(cache_key, additional_cost);
@@ -145,13 +143,19 @@ fn recursive_best_path<const AGENTS: usize>(
                 .min()
         })
         .min()
-        .unwrap_or(cost_so_far)
+        .unwrap_or(cost_so_far);
+        
+    *best_cost = min(*best_cost, result);
+    result
 }
 
 const CACHE_SIZE: usize = 32768;
 const DIJKSTRA_CACHE_SIZE: usize = 8092;
 
 fn calculate_p1(data: &Array2<u8>) -> i64 {
+    
+    let mut best_cost = i64::MAX;
+    
     recursive_best_path::<1>(
         &[&data.view()],
         0,
@@ -159,6 +163,7 @@ fn calculate_p1(data: &Array2<u8>) -> i64 {
         &[b'@'],
         &mut AHashMap::with_capacity(CACHE_SIZE),
         &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
+        &mut best_cost,
     )
 }
 
@@ -180,6 +185,8 @@ fn calculate_p2(mut data: Array2<u8>) -> i64 {
     let q2 = data.slice(s![entrance_pos.0.., 0..=entrance_pos.1]);
     let q3 = data.slice(s![0..=entrance_pos.0, entrance_pos.1..]);
     let q4 = data.slice(s![entrance_pos.0.., entrance_pos.1..]);
+    
+    let mut best_cost = i64::MAX;
 
     recursive_best_path::<4>(
         &[&q1, &q2, &q3, &q4],
@@ -188,6 +195,7 @@ fn calculate_p2(mut data: Array2<u8>) -> i64 {
         &[b'@', b'@', b'@', b'@'],
         &mut AHashMap::with_capacity(CACHE_SIZE),
         &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
+        &mut best_cost,
     )
 }
 

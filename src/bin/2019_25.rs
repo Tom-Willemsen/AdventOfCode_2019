@@ -1,22 +1,8 @@
 use advent_of_code_2019::intcode::IntCodeState;
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use itertools::Itertools;
 use std::collections::VecDeque;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
 
 // Items that will terminate the game if we take them
 const BAD_ITEMS: [&str; 5] = [
@@ -143,7 +129,7 @@ fn force_open_door(
     }
 }
 
-fn final_out_buffer_to_answer(prog: IntCodeState) -> String {
+fn final_out_buffer_to_answer<const T: usize>(prog: IntCodeState<T>) -> String {
     prog.out_buffer
         .iter()
         .map(|&c| (c as u8) as char)
@@ -159,8 +145,8 @@ fn final_out_buffer_to_answer(prog: IntCodeState) -> String {
         .to_string()
 }
 
-fn calculate(software: &[i64]) -> String {
-    let mut prog: IntCodeState = software.into();
+fn calculate(software: &str) -> String {
+    let mut prog: IntCodeState<8192> = software.into();
     let mut inp_buffer = VecDeque::new();
 
     let mut finished_exploring = false;
@@ -206,8 +192,7 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let data = parse(&inp);
-    let p1 = calculate(&data);
+    let p1 = calculate(&inp);
     println!("{}", p1);
 }
 
@@ -219,6 +204,6 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate(&parse(&REAL_DATA)), "34095120");
+        assert_eq!(calculate(&REAL_DATA), "34095120");
     }
 }

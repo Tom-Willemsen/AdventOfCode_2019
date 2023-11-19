@@ -1,13 +1,7 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use std::cmp::{max, min};
 use std::fs;
 use std::str::FromStr;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 #[derive(Debug, Eq, PartialEq)]
 struct Instruction {

@@ -1,22 +1,8 @@
 use advent_of_code_2019::intcode::IntCodeState;
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
 use std::collections::BinaryHeap;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
 
 #[derive(Eq, PartialEq, Debug, Hash, Copy, Clone)]
 enum Space {
@@ -89,7 +75,7 @@ fn try_move(
     }
 }
 
-fn calculate(software: &[i64]) -> (i64, i64) {
+fn calculate(software: &str) -> (i64, i64) {
     let mut prog: IntCodeState = software.into();
 
     let mut known: AHashMap<(i64, i64), Space> = AHashMap::with_capacity(1024);
@@ -155,8 +141,7 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let nums = parse(&inp);
-    let (p1, p2) = calculate(&nums);
+    let (p1, p2) = calculate(&inp);
     println!("{}\n{}", p1, p2);
 }
 
@@ -168,11 +153,11 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate(&parse(&REAL_DATA)).0, 374);
+        assert_eq!(calculate(&REAL_DATA).0, 374);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate(&parse(&REAL_DATA)).1, 482);
+        assert_eq!(calculate(&REAL_DATA).1, 482);
     }
 }

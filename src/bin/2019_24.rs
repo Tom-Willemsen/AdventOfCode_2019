@@ -1,13 +1,7 @@
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashSet;
-use clap::Parser;
 use ndarray::{Array2, Array3};
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Array2<bool> {
     let v = raw_inp
@@ -22,6 +16,16 @@ fn parse(raw_inp: &str) -> Array2<bool> {
 
 const DIRS: [(isize, isize); 4] = [(0, 1), (1, 0), (-1, 0), (0, -1)];
 
+fn next_bug_state(current_bug_state: bool, count: usize) -> bool {
+    if current_bug_state && count != 1 {
+        false
+    } else if !current_bug_state && (count == 1 || count == 2) {
+        true
+    } else {
+        current_bug_state
+    }
+}
+
 fn step_p1(data: &Array2<bool>) -> Array2<bool> {
     Array2::from_shape_fn(data.dim(), |(y, x)| {
         let count = DIRS
@@ -31,13 +35,7 @@ fn step_p1(data: &Array2<bool>) -> Array2<bool> {
             .filter(|&&x| x)
             .count();
 
-        if data[(y, x)] && count != 1 {
-            false
-        } else if !data[(y, x)] && (count == 1 || count == 2) {
-            true
-        } else {
-            data[(y, x)]
-        }
+        next_bug_state(data[(y, x)], count)
     })
 }
 
@@ -57,6 +55,54 @@ fn calculate_p1(data: &Array2<bool>) -> u32 {
         .sum()
 }
 
+fn count_outer_neighbours(data: &Array3<bool>, z: usize, y: usize, x: usize) -> usize {
+    let mut count = 0;
+    if z + 1 < data.dim().0 {
+        if (y == 0 && data[(z + 1, 1, 2)]) || (y == 4 && data[(z + 1, 3, 2)]) {
+            count += 1;
+        }
+        if (x == 0 && data[(z + 1, 2, 1)]) || (x == 4 && data[(z + 1, 2, 3)]) {
+            count += 1;
+        }
+    }
+    count
+}
+
+fn count_inner_neighbours(data: &Array3<bool>, z: usize, y: usize, x: usize) -> usize {
+    let mut count = 0;
+    if z == 0 {
+        return 0;
+    }
+
+    if x == 2 && y == 1 {
+        for inner_x in 0..5 {
+            if data[(z - 1, 0, inner_x)] {
+                count += 1;
+            }
+        }
+    } else if x == 2 && y == 3 {
+        for inner_x in 0..5 {
+            if data[(z - 1, 4, inner_x)] {
+                count += 1;
+            }
+        }
+    } else if x == 1 && y == 2 {
+        for inner_y in 0..5 {
+            if data[(z - 1, inner_y, 0)] {
+                count += 1;
+            }
+        }
+    } else if x == 3 && y == 2 {
+        for inner_y in 0..5 {
+            if data[(z - 1, inner_y, 4)] {
+                count += 1;
+            }
+        }
+    }
+
+    count
+}
+
 fn step_p2(data: &Array3<bool>) -> Array3<bool> {
     Array3::from_shape_fn(data.dim(), |(z, y, x)| {
         if y == 2 && x == 2 {
@@ -64,80 +110,29 @@ fn step_p2(data: &Array3<bool>) -> Array3<bool> {
             return false;
         }
 
-        let mut count = DIRS
+        let count = DIRS
             .iter()
             .filter_map(|&(yd, xd)| Some((y.checked_add_signed(yd)?, x.checked_add_signed(xd)?)))
             .filter_map(|(yd, xd)| data.get((z, yd, xd)))
             .filter(|&&x| x)
-            .count();
+            .count()
+            + count_outer_neighbours(data, z, y, x)
+            + count_inner_neighbours(data, z, y, x);
 
-        // next bigger layer:
-        if z + 1 < data.dim().0 {
-            if y == 0 && data[(z + 1, 1, 2)] {
-                count += 1
-            }
-
-            if y == 4 && data[(z + 1, 3, 2)] {
-                count += 1
-            }
-
-            if x == 0 && data[(z + 1, 2, 1)] {
-                count += 1
-            }
-
-            if x == 4 && data[(z + 1, 2, 3)] {
-                count += 1;
-            }
-        }
-
-        // smaller inner layer:
-        if z > 0 {
-            if x == 2 && y == 1 {
-                for inner_x in 0..5 {
-                    if data[(z - 1, 0, inner_x)] {
-                        count += 1;
-                    }
-                }
-            }
-
-            if x == 2 && y == 3 {
-                for inner_x in 0..5 {
-                    if data[(z - 1, 4, inner_x)] {
-                        count += 1;
-                    }
-                }
-            }
-
-            if x == 1 && y == 2 {
-                for inner_y in 0..5 {
-                    if data[(z - 1, inner_y, 0)] {
-                        count += 1;
-                    }
-                }
-            }
-
-            if x == 3 && y == 2 {
-                for inner_y in 0..5 {
-                    if data[(z - 1, inner_y, 4)] {
-                        count += 1;
-                    }
-                }
-            }
-        }
-
-        if data[(z, y, x)] && count != 1 {
-            false
-        } else if !data[(z, y, x)] && (count == 1 || count == 2) {
-            true
-        } else {
-            data[(z, y, x)]
-        }
+        next_bug_state(data[(z, y, x)], count)
     })
 }
 
 fn calculate_p2<const STEPS: usize>(data: &Array2<bool>) -> usize {
-    let mut data = Array3::from_shape_fn((STEPS * 2, 5, 5), |(z, y, x)| {
-        if z == STEPS {
+    debug_assert!(STEPS % 2 == 0);
+
+    let midpoint: usize = STEPS / 2;
+
+    // If bugs spread at maximal rate, can infest an extra layer every 2 steps
+    // So STEPS/2 in each direction (outward and inward) are sufficient.
+    // i.e. STEPS+1 in total (+1 for initial state).
+    let mut data = Array3::from_shape_fn((STEPS + 1, 5, 5), |(z, y, x)| {
+        if z == midpoint {
             data[(y, x)]
         } else {
             false

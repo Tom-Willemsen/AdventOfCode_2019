@@ -1,27 +1,13 @@
 use advent_of_code_2019::intcode::IntCodeState;
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashSet;
-use clap::Parser;
 use std::cmp::Ordering;
 use std::fs;
 
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
-
-fn calculate_p1(software: &[i64]) -> usize {
+fn calculate_p1(software: &str) -> usize {
     let mut blocks: AHashSet<(i64, i64)> = AHashSet::with_capacity(1024);
 
-    let mut prog: IntCodeState = software.into();
+    let mut prog: IntCodeState<4096> = software.into();
     prog.execute_until_halt_no_input();
 
     while !prog.out_buffer.is_empty() {
@@ -38,44 +24,45 @@ fn calculate_p1(software: &[i64]) -> usize {
     blocks.len()
 }
 
-fn calculate_p2(software: &[i64]) -> i64 {
+fn calculate_p2(software: &str) -> i64 {
     let mut blocks: AHashSet<(i64, i64)> = AHashSet::with_capacity(1024);
 
-    let mut prog: IntCodeState = software.into();
+    let mut prog: IntCodeState<4096> = software.into();
     prog.set_mem(0, 2);
 
     let mut ball_x = 0;
     let mut paddle_x = 0;
 
     loop {
-        prog.execute_single_step(|_| {
-            Some(match paddle_x.cmp(&ball_x) {
-                Ordering::Less => 1,
-                Ordering::Equal => 0,
-                Ordering::Greater => -1,
-            })
-        });
-        if prog.out_buffer.len() == 3 {
-            let x = prog.out_buffer.pop_front().expect("x should exist");
-            let y = prog.out_buffer.pop_front().expect("y should exist");
-            let tile_or_score = prog
-                .out_buffer
-                .pop_front()
-                .expect("tile or score should exist");
+        while prog.out_buffer.len() < 3 {
+            prog.execute_single_step(|_| {
+                Some(match paddle_x.cmp(&ball_x) {
+                    Ordering::Less => 1,
+                    Ordering::Equal => 0,
+                    Ordering::Greater => -1,
+                })
+            });
+        }
 
-            if x == -1 {
-                if blocks.is_empty() {
-                    return tile_or_score;
-                }
-            } else if tile_or_score == 4 {
-                ball_x = x;
-            } else if tile_or_score == 3 {
-                paddle_x = x;
-            } else if tile_or_score == 2 {
-                blocks.insert((x, y));
-            } else if tile_or_score == 0 {
-                blocks.remove(&(x, y));
+        let x = prog.out_buffer.pop_front().expect("x should exist");
+        let y = prog.out_buffer.pop_front().expect("y should exist");
+        let tile_or_score = prog
+            .out_buffer
+            .pop_front()
+            .expect("tile or score should exist");
+
+        if x == -1 {
+            if blocks.is_empty() {
+                return tile_or_score;
             }
+        } else if tile_or_score == 4 {
+            ball_x = x;
+        } else if tile_or_score == 3 {
+            paddle_x = x;
+        } else if tile_or_score == 2 {
+            blocks.insert((x, y));
+        } else if tile_or_score == 0 {
+            blocks.remove(&(x, y));
         }
     }
 }
@@ -85,9 +72,8 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let nums = parse(&inp);
-    let p1 = calculate_p1(&nums);
-    let p2 = calculate_p2(&nums);
+    let p1 = calculate_p1(&inp);
+    let p2 = calculate_p2(&inp);
     println!("{}\n{}", p1, p2);
 }
 
@@ -99,11 +85,11 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate_p1(&parse(&REAL_DATA)), 432);
+        assert_eq!(calculate_p1(&REAL_DATA), 432);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate_p2(&parse(&REAL_DATA)), 22225);
+        assert_eq!(calculate_p2(&REAL_DATA), 22225);
     }
 }

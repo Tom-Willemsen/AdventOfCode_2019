@@ -1,13 +1,10 @@
 use ahash::AHashMap;
-use std::cmp::{max, Ordering};
 use std::collections::VecDeque;
 
-/// Minimum amount of memory to store in array rather than hashmap
-/// Can be more if the provided program is longer.
-const LOW_MEM_AMOUNT: usize = 4096;
+const PANIC_ON_HIGH_MEM: bool = true;
 
 #[derive(Eq, PartialEq, Debug, Clone)]
-pub struct IntCodeState {
+pub struct IntCodeState<const LOW_MEM_AMOUNT: usize = 256> {
     instruction_ptr: i64,
     base_ptr: i64,
     low_memory: Vec<i64>,
@@ -15,7 +12,7 @@ pub struct IntCodeState {
     pub out_buffer: VecDeque<i64>,
 }
 
-impl From<&[i64]> for IntCodeState {
+impl<const LOW_MEM_AMOUNT: usize> From<&[i64]> for IntCodeState<LOW_MEM_AMOUNT> {
     fn from(item: &[i64]) -> Self {
         let mut low_mem = item.to_vec();
         low_mem.extend(vec![0; LOW_MEM_AMOUNT.saturating_sub(low_mem.len())]);
@@ -29,10 +26,10 @@ impl From<&[i64]> for IntCodeState {
     }
 }
 
-impl From<Vec<i64>> for IntCodeState {
+impl<const LOW_MEM_AMOUNT: usize> From<Vec<i64>> for IntCodeState<LOW_MEM_AMOUNT> {
     fn from(item: Vec<i64>) -> Self {
         let mut low_mem = item;
-        low_mem.extend(vec![0; max(0, LOW_MEM_AMOUNT - low_mem.len())]);
+        low_mem.extend(vec![0; LOW_MEM_AMOUNT.saturating_sub(low_mem.len())]);
         IntCodeState {
             instruction_ptr: 0,
             base_ptr: 0,
@@ -43,64 +40,94 @@ impl From<Vec<i64>> for IntCodeState {
     }
 }
 
+pub fn parse_intcode_to_vec(inp: &str) -> Vec<i64> {
+    inp.trim()
+        .split(',')
+        .map(|s| s.parse().unwrap())
+        .collect::<Vec<i64>>()
+}
+
+impl<const LOW_MEM_AMOUNT: usize> From<&str> for IntCodeState<LOW_MEM_AMOUNT> {
+    fn from(item: &str) -> Self {
+        parse_intcode_to_vec(item).into()
+    }
+}
+
 #[derive(Debug)]
 struct Instruction {
-    num: i64,
+    num: u32,
 }
 
 impl From<i64> for Instruction {
     #[inline]
     fn from(item: i64) -> Self {
-        assert!(item > 0, "Invalid instruction {}", item);
-        Instruction { num: item }
+        Instruction {
+            num: item.try_into().expect("invalid instruction"),
+        }
     }
 }
 
 impl Instruction {
     #[inline]
-    fn typ(&self) -> i64 {
+    fn typ(&self) -> u32 {
         self.num % 100
     }
 
     #[inline]
-    fn mode1(&self) -> i64 {
+    fn mode1(&self) -> u32 {
         (self.num / 100) % 10
     }
 
     #[inline]
-    fn mode2(&self) -> i64 {
+    fn mode2(&self) -> u32 {
         (self.num / 1000) % 10
     }
 
     #[inline]
-    fn mode3(&self) -> i64 {
+    fn mode3(&self) -> u32 {
         (self.num / 10000) % 10
     }
 }
 
-impl IntCodeState {
+impl<const LOW_MEM_AMOUNT: usize> IntCodeState<LOW_MEM_AMOUNT> {
+    #[cold]
+    fn get_high_mem(&self, address_absolute: i64) -> i64 {
+        if PANIC_ON_HIGH_MEM {
+            panic!("high mem read address {}", address_absolute);
+        }
+        *self.high_memory.get(&address_absolute).unwrap_or(&0)
+    }
+
     #[inline]
     pub fn get_mem(&self, address_absolute: i64) -> i64 {
-        assert!(address_absolute >= 0, "Address can't be negative");
-        if address_absolute < self.low_memory.len() as i64 {
-            self.low_memory[usize::try_from(address_absolute).expect("can't make usize")]
+        debug_assert!(address_absolute >= 0, "Address can't be negative");
+        if (address_absolute as usize) < self.low_memory.len() {
+            self.low_memory[address_absolute as usize]
         } else {
-            *self.high_memory.get(&address_absolute).unwrap_or(&0)
+            self.get_high_mem(address_absolute)
         }
+    }
+
+    #[cold]
+    fn set_high_mem(&mut self, address_absolute: i64, new: i64) {
+        if PANIC_ON_HIGH_MEM {
+            panic!("high mem write address {}", address_absolute);
+        }
+        self.high_memory.insert(address_absolute, new);
     }
 
     #[inline]
     pub fn set_mem(&mut self, address_absolute: i64, new: i64) {
-        assert!(address_absolute >= 0, "Address can't be negative");
-        if address_absolute < self.low_memory.len() as i64 {
-            self.low_memory[usize::try_from(address_absolute).expect("can't make usize")] = new;
+        debug_assert!(address_absolute >= 0, "Address can't be negative");
+        if (address_absolute as usize) < self.low_memory.len() {
+            self.low_memory[address_absolute as usize] = new;
         } else {
-            self.high_memory.insert(address_absolute, new);
+            self.set_high_mem(address_absolute, new);
         }
     }
 
     #[inline]
-    fn get_parameter(&self, mode: i64, offset: i64) -> i64 {
+    fn get_parameter(&self, mode: u32, offset: i64) -> i64 {
         let pos = self.get_mem(self.instruction_ptr + offset);
         if mode == 0 {
             self.get_mem(pos)
@@ -114,7 +141,7 @@ impl IntCodeState {
     }
 
     #[inline]
-    fn set_parameter(&mut self, mode: i64, offset: i64, value: i64) {
+    fn set_parameter(&mut self, mode: u32, offset: i64, value: i64) {
         let pos = self.get_mem(self.instruction_ptr + offset);
         if mode == 0 {
             self.set_mem(pos, value)
@@ -147,7 +174,7 @@ impl IntCodeState {
 
     fn handle_inp<F>(&mut self, ins: &Instruction, mut input_handler: F)
     where
-        F: FnMut(&mut IntCodeState) -> Option<i64>,
+        F: FnMut(&mut IntCodeState<LOW_MEM_AMOUNT>) -> Option<i64>,
     {
         if let Some(inp) = input_handler(self) {
             self.set_parameter(ins.mode1(), 1, inp);
@@ -169,10 +196,19 @@ impl IntCodeState {
         }
     }
 
-    fn handle_cmp(&mut self, order: Ordering, ins: &Instruction) {
+    fn handle_cmp_eq(&mut self, ins: &Instruction) {
         let x = self.get_parameter(ins.mode1(), 1);
         let y = self.get_parameter(ins.mode2(), 2);
-        self.set_parameter(ins.mode3(), 3, if x.cmp(&y) == order { 1 } else { 0 });
+        self.set_parameter(ins.mode3(), 3, if x == y { 1 } else { 0 });
+        self.instruction_ptr += 4;
+    }
+
+    // Note: separate cmp_lt and cmp_eq implementations to help branch predictor
+    // 20% perf improvement
+    fn handle_cmp_lt(&mut self, ins: &Instruction) {
+        let x = self.get_parameter(ins.mode1(), 1);
+        let y = self.get_parameter(ins.mode2(), 2);
+        self.set_parameter(ins.mode3(), 3, if x < y { 1 } else { 0 });
         self.instruction_ptr += 4;
     }
 
@@ -183,7 +219,7 @@ impl IntCodeState {
 
     pub fn execute_single_step<F>(&mut self, mut input_handler: F) -> bool
     where
-        F: FnMut(&mut IntCodeState) -> Option<i64>,
+        F: FnMut(&mut IntCodeState<LOW_MEM_AMOUNT>) -> Option<i64>,
     {
         let raw_instruction: i64 = self.get_mem(self.instruction_ptr);
         let instruction: Instruction = raw_instruction.into();
@@ -194,8 +230,8 @@ impl IntCodeState {
             4 => self.handle_out(&instruction),
             5 => self.handle_jump_if::<true>(&instruction),
             6 => self.handle_jump_if::<false>(&instruction),
-            7 => self.handle_cmp(Ordering::Less, &instruction),
-            8 => self.handle_cmp(Ordering::Equal, &instruction),
+            7 => self.handle_cmp_lt(&instruction),
+            8 => self.handle_cmp_eq(&instruction),
             9 => self.handle_adjust_base_ptr(&instruction),
             99 => return true,
             other => panic!("bad instruction {:?}", other),
@@ -206,7 +242,7 @@ impl IntCodeState {
 
     pub fn execute_until_halt<F>(&mut self, mut input_handler: F)
     where
-        F: FnMut(&mut IntCodeState) -> Option<i64>,
+        F: FnMut(&mut IntCodeState<LOW_MEM_AMOUNT>) -> Option<i64>,
     {
         loop {
             let halt = self.execute_single_step(&mut input_handler);

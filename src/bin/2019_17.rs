@@ -1,5 +1,5 @@
 use advent_of_code_2019::intcode::IntCodeState;
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use itertools::intersperse;
 use itertools::Itertools;
 use ndarray::Array2;
@@ -7,20 +7,6 @@ use std::cmp::{max, min};
 use std::collections::VecDeque;
 use std::fs;
 use std::iter::zip;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
 
 fn parse_map(inp: Vec<u8>) -> Array2<u8> {
     let columns = inp.iter().position(|&c| c == b'\n').expect("no newline");
@@ -203,8 +189,8 @@ fn program_from_fragments(path: &[&str], a: &[&str], b: &[&str], c: &[&str]) -> 
     result
 }
 
-fn calculate(software: &[i64]) -> (usize, i64) {
-    let mut prog_p1: IntCodeState = software.into();
+fn calculate(software: &str) -> (usize, i64) {
+    let mut prog_p1: IntCodeState<4096> = software.into();
 
     prog_p1.execute_until_halt_no_input();
 
@@ -216,7 +202,7 @@ fn calculate(software: &[i64]) -> (usize, i64) {
             .collect::<Vec<u8>>(),
     );
 
-    let mut prog_p2: IntCodeState = software.into();
+    let mut prog_p2: IntCodeState<4096> = software.into();
 
     let path = get_path(&view);
 
@@ -252,8 +238,7 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let nums = parse(&inp);
-    let (p1, p2) = calculate(&nums);
+    let (p1, p2) = calculate(&inp);
     println!("{}\n{}", p1, p2);
 }
 
@@ -265,11 +250,11 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate(&parse(&REAL_DATA)).0, 7280);
+        assert_eq!(calculate(&REAL_DATA).0, 7280);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate(&parse(&REAL_DATA)).1, 1045393);
+        assert_eq!(calculate(&REAL_DATA).1, 1045393);
     }
 }

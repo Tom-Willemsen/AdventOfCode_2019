@@ -1,11 +1,5 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> (u32, u32) {
     raw_inp
