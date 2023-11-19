@@ -1,14 +1,8 @@
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
 use num::integer::div_ceil;
 use std::cmp::min;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 #[derive(Debug)]
 struct Reaction<'a> {
@@ -67,11 +61,11 @@ fn recursive_ore_necessary<'a>(
     let mut count = count;
     let stockpiled = *stockpile.get(reagent).unwrap_or(&0);
     if stockpiled > 0 {
-        let from_stockpile = min(count, stockpiled);
-        count -= from_stockpile;
+        let use_from_stockpile = min(count, stockpiled);
+        count -= use_from_stockpile;
         stockpile
             .entry(reagent)
-            .and_modify(|e| *e -= from_stockpile);
+            .and_modify(|e| *e -= use_from_stockpile);
     }
 
     if count <= 0 {
@@ -104,13 +98,21 @@ fn calculate_p1(data: &[Reaction]) -> i64 {
 }
 
 const P2_ORE: i64 = 1000000000000;
+const INCREMENT: i64 = 2i64.pow(19);
 
 fn calculate_p2(data: &[Reaction], p1_ore_per_fuel: i64) -> i64 {
     let mut stockpile = AHashMap::default();
 
     let mut lower_bound = P2_ORE / p1_ore_per_fuel;
-    let mut upper_bound = P2_ORE;
+    let mut upper_bound = lower_bound + INCREMENT;
 
+    // Get some initial coarse bounds around the area of interest.
+    while recursive_ore_necessary(data, &mut stockpile, "FUEL", upper_bound) <= P2_ORE {
+        upper_bound += INCREMENT;
+    }
+    lower_bound = upper_bound - INCREMENT;
+
+    // Binary search for exact value
     loop {
         stockpile.clear();
         let midpoint = (upper_bound + lower_bound) / 2;

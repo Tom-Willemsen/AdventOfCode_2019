@@ -1,14 +1,8 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use num::Integer;
 use std::cmp::Ordering;
 use std::fs;
 use std::str::FromStr;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
 struct Body {

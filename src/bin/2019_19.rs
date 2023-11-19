@@ -1,25 +1,11 @@
-use advent_of_code_2019::intcode::IntCodeState;
-use clap::Parser;
+use advent_of_code_2019::intcode::{parse_intcode_to_vec, IntCodeState};
+use advent_of_code_2019::{Cli, Parser};
 use rayon::prelude::*;
 use std::cmp::max;
 use std::fs;
 
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
-
 fn is_in_beam(software: &[i64], x: usize, y: usize) -> bool {
-    let mut prog: IntCodeState = software.into();
+    let mut prog: IntCodeState<512> = software.into();
     let mut inputs = vec![y as i64, x as i64];
 
     prog.execute_until_halt(|_| inputs.pop());
@@ -84,8 +70,8 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let data = parse(&inp);
-    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
+    let inp_vec = parse_intcode_to_vec(&inp);
+    let (p1, p2) = rayon::join(|| calculate_p1(&inp_vec), || calculate_p2(&inp_vec));
     println!("{}\n{}", p1, p2);
 }
 
@@ -97,11 +83,11 @@ mod tests {
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate_p1(&parse(&REAL_DATA)), 131);
+        assert_eq!(calculate_p1(&parse_intcode_to_vec(&REAL_DATA)), 131);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate_p2(&parse(&REAL_DATA)), 15231022);
+        assert_eq!(calculate_p2(&parse_intcode_to_vec(&REAL_DATA)), 15231022);
     }
 }

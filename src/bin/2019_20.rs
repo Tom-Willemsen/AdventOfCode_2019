@@ -1,18 +1,8 @@
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
-use mimalloc::MiMalloc;
 use ndarray::Array2;
 use std::collections::BinaryHeap;
 use std::fs;
-
-#[global_allocator]
-static ALLOCATOR: MiMalloc = MiMalloc;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     let columns = raw_inp
@@ -64,16 +54,6 @@ fn is_near_map(data: &Array2<u8>, y: usize, x: usize) -> bool {
         .any(|&itm| itm == b'.')
 }
 
-fn positions_of(data: &Array2<u8>, portal: &str) -> Vec<(usize, usize)> {
-    data.indexed_iter()
-        .filter(|&(_, itm)| itm.is_ascii_uppercase())
-        .filter(|&(pos, _)| is_near_map(data, pos.0, pos.1))
-        .map(|(pos, _)| (pos, get_portal_key(data, pos.0, pos.1)))
-        .filter(|(_, itm)| itm == portal)
-        .map(|(pos, _)| pos)
-        .collect()
-}
-
 fn is_outer_portal(data: &Array2<u8>, y: usize, x: usize) -> bool {
     let (ydim, xdim) = data.dim();
     y == 0
@@ -86,25 +66,66 @@ fn is_outer_portal(data: &Array2<u8>, y: usize, x: usize) -> bool {
         || x == xdim - 2
 }
 
-fn dijkstra<const PART: u8>(data: &Array2<u8>) -> i64 {
+fn get_all_portal_positions(data: &Array2<u8>) -> AHashMap<String, Vec<(usize, usize)>> {
+    let mut result = AHashMap::default();
+
+    data.indexed_iter()
+        .filter(|&(_, &itm)| itm.is_ascii_uppercase())
+        .filter(|&(pos, _)| is_near_map(data, pos.0, pos.1))
+        .map(|(pos, _)| (pos, get_portal_key(data, pos.0, pos.1)))
+        .for_each(|(pos, itm)| {
+            {
+                result
+                    .entry(itm)
+                    .and_modify(|x: &mut Vec<_>| x.push(pos))
+                    .or_insert(vec![pos]);
+            };
+        });
+
+    result
+}
+
+// Lower bound on remaining cost to get to the end.
+#[inline]
+fn heuristic<const PART: u8>(level: usize) -> i64 {
+    if PART == 1 {
+        0
+    } else {
+        // For P2, the absolute fastest we can "lose" a level & get
+        // to the end is 35 steps (walking directly from inner edge to outer).
+        let est = level * 35;
+        est as i64
+    }
+}
+
+fn a_star<const PART: u8>(data: &Array2<u8>) -> i64 {
     let mut heap: BinaryHeap<(i64, (usize, usize), usize)> = BinaryHeap::new();
 
-    let aa_positions = positions_of(data, "AA");
-    let start_pos = aa_positions.first().expect("can't find start");
+    let portal_positions = get_all_portal_positions(data);
 
-    let zz_positions = positions_of(data, "ZZ");
-    let end_pos = zz_positions.first().expect("can't find end");
+    let start_pos = portal_positions
+        .get("AA")
+        .expect("can't find start")
+        .first()
+        .expect("can't find start");
+    let end_pos = portal_positions
+        .get("ZZ")
+        .expect("can't find end")
+        .first()
+        .expect("can't find end");
 
     heap.push((0, *start_pos, 0));
 
     let mut costs: AHashMap<((usize, usize), usize), i64> = AHashMap::with_capacity(1024);
 
-    while let Some((cost, mut pos, mut level)) = heap.pop() {
-        if cost < *costs.get(&(pos, level)).unwrap_or(&i64::MIN) {
-            continue;
-        }
+    costs.insert((*start_pos, 0), 0);
 
-        let this_tile = data.get(pos).expect("invalid current pos");
+    while let Some((optimistic_cost, mut pos, mut level)) = heap.pop() {
+        let cost = *costs.get(&(pos, level)).expect("can't find cost");
+
+        debug_assert!(cost >= optimistic_cost);
+
+        let this_tile = data[pos];
 
         if this_tile.is_ascii_uppercase() {
             // If standing in a portal, teleport to new location then continue pathfind.
@@ -126,7 +147,9 @@ fn dijkstra<const PART: u8>(data: &Array2<u8>) -> i64 {
             }
 
             if pkey != "AA" && pkey != "ZZ" {
-                pos = *positions_of(data, &pkey)
+                pos = *portal_positions
+                    .get(&pkey)
+                    .expect("invalid portal?")
                     .iter()
                     .find(|&p| p != &pos)
                     .expect("can't find corresponding portal");
@@ -139,10 +162,10 @@ fn dijkstra<const PART: u8>(data: &Array2<u8>) -> i64 {
                 pos.1.checked_add_signed(dir.1).unwrap(),
             );
 
-            let next_tile = data.get(next_pos).expect("invalid next pos");
+            let next_tile = data[next_pos];
 
-            if next_tile == &b'#'
-                || next_tile == &b' '
+            if next_tile == b'#'
+                || next_tile == b' '
                 || (this_tile.is_ascii_uppercase() && next_tile.is_ascii_uppercase())
             {
                 continue;
@@ -155,7 +178,9 @@ fn dijkstra<const PART: u8>(data: &Array2<u8>) -> i64 {
             };
 
             if next_cost > *costs.get(&(next_pos, level)).unwrap_or(&i64::MIN) {
-                heap.push((next_cost, next_pos, level));
+                let h = heuristic::<PART>(level);
+
+                heap.push((next_cost - h, next_pos, level));
                 costs.insert((next_pos, level), next_cost);
 
                 if level == 0 && next_pos == *end_pos {
@@ -165,15 +190,15 @@ fn dijkstra<const PART: u8>(data: &Array2<u8>) -> i64 {
         }
     }
 
-    -costs.get(&(*end_pos, 0)).expect("couldn't pathfind to end") - 1
+    panic!("couldn't pathfind to end");
 }
 
 fn calculate_p1(data: &Array2<u8>) -> i64 {
-    dijkstra::<1>(data)
+    a_star::<1>(data)
 }
 
 fn calculate_p2(data: &Array2<u8>) -> i64 {
-    dijkstra::<2>(data)
+    a_star::<2>(data)
 }
 
 fn main() {
@@ -182,8 +207,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let p1 = calculate_p1(&data);
-    let p2 = calculate_p2(&data);
+    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
     println!("{}\n{}", p1, p2);
 }
 

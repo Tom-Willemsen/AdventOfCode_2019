@@ -1,18 +1,10 @@
+use advent_of_code_2019::{Cli, Parser};
 use ahash::AHashMap;
-use clap::Parser;
-use mimalloc::MiMalloc;
 use ndarray::{s, Array2, ArrayView2};
+use rayon::prelude::*;
 use std::collections::BinaryHeap;
 use std::fs;
-
-#[global_allocator]
-static ALLOCATOR: MiMalloc = MiMalloc;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
+use std::sync::{Arc, RwLock};
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     let columns = raw_inp
@@ -39,22 +31,29 @@ fn position_of(data: &ArrayView2<u8>, ch: u8) -> (usize, usize) {
         .expect("can't find pos")
 }
 
+fn make_pos_map(data: &ArrayView2<u8>) -> AHashMap<u8, (usize, usize)> {
+    data.indexed_iter()
+        .filter(|(_, &itm)| itm != b'.' && itm != b'#')
+        .map(|(pos, itm)| (*itm, pos))
+        .collect()
+}
+
 /// Dijkstra
-fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<(u8, i64)> {
+fn reachable_keys(
+    data: &ArrayView2<u8>,
+    pos_map: &AHashMap<u8, (usize, usize)>,
+    held_keys: &[u8],
+    start_at: u8,
+) -> Vec<(u8, i64)> {
     let mut heap = BinaryHeap::new();
-    let start_pos = position_of(data, start_at);
+    let start_pos = *pos_map.get(&start_at).expect("invalid start pos");
     heap.push((0, start_pos));
 
-    let mut costs: AHashMap<(usize, usize), i64> = AHashMap::with_capacity(1024);
+    let mut costs = Array2::from_elem(data.dim(), i64::MIN);
 
-    let mut result = vec![];
+    let mut result = Vec::with_capacity(26);
 
     while let Some((cost, pos)) = heap.pop() {
-        // Not needed - no loops in input data.
-        // if cost < *costs.get(&pos).unwrap_or(&i64::MIN) {
-        //     continue;
-        // }
-
         for dir in DIRS {
             let next_pos = (
                 pos.0.checked_add_signed(dir.0).unwrap(),
@@ -62,8 +61,8 @@ fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<
             );
             let next_cost = cost - 1;
 
-            let next_tile = data.get(next_pos).expect("invalid next pos");
-            let is_wall = next_tile == &b'#';
+            let next_tile = data[next_pos];
+            let is_wall = next_tile == b'#';
 
             if is_wall {
                 continue;
@@ -78,15 +77,15 @@ fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<
 
             let next = (next_cost, next_pos);
 
-            if next_cost > *costs.get(&next_pos).unwrap_or(&i64::MIN) {
+            if next_cost > costs[next_pos] {
                 let is_unheld_key =
-                    next_tile.is_ascii_lowercase() && !held_keys.contains(next_tile);
+                    next_tile.is_ascii_lowercase() && !held_keys.contains(&next_tile);
                 if is_unheld_key {
-                    result.push((*next_tile, -next_cost));
+                    result.push((next_tile, -next_cost));
                 } else {
                     heap.push(next);
                 }
-                costs.insert(next_pos, next_cost);
+                costs[next_pos] = next_cost;
             }
         }
     }
@@ -99,21 +98,36 @@ type DijkstraCache = AHashMap<(Vec<u8>, usize, u8), Vec<(u8, i64)>>;
 
 fn recursive_best_path<const AGENTS: usize>(
     data: &[&ArrayView2<u8>; AGENTS],
+    pos_maps: &[&AHashMap<u8, (usize, usize)>; AGENTS],
     cost_so_far: i64,
     held_keys: &[u8],
     positions: &[u8; AGENTS],
-    cache: &mut PathCache<AGENTS>,
-    dijkstra_cache: &mut DijkstraCache,
+    cache: &Arc<RwLock<PathCache<AGENTS>>>,
+    dijkstra_cache: &Arc<RwLock<DijkstraCache>>,
 ) -> i64 {
     (0..AGENTS)
         .filter_map(|agent| {
             let pos = positions[agent];
 
-            dijkstra_cache
-                .entry((held_keys.to_vec(), agent, pos))
-                .or_insert_with(|| reachable_keys(data[agent], held_keys, pos))
-                .clone()
-                .into_iter()
+            let dijkstra_cache_key = (held_keys.to_vec(), agent, pos);
+
+            let paths = {
+                let dc = dijkstra_cache.read().expect("can't lock for read");
+                dc.get(&dijkstra_cache_key).cloned()
+            };
+
+            let paths = match paths {
+                Some(p) => p,
+                None => {
+                    let result = reachable_keys(data[agent], pos_maps[agent], held_keys, pos);
+                    let mut dc = dijkstra_cache.write().expect("can't lock for write");
+                    dc.insert(dijkstra_cache_key, result.clone());
+                    result
+                }
+            };
+
+            paths
+                .into_par_iter()
                 .map(|(k, cost)| {
                     let mut keys: Vec<u8> = held_keys.iter().chain(Some(&k)).copied().collect();
                     keys.sort_unstable();
@@ -121,7 +135,11 @@ fn recursive_best_path<const AGENTS: usize>(
                     let base_cost = cost_so_far + cost;
 
                     let cache_key = (held_keys.to_vec(), *positions, k, agent);
-                    let cached_additional_cost = cache.get(&cache_key);
+
+                    let cached_additional_cost = {
+                        let c = cache.read().expect("can't lock for read");
+                        c.get(&cache_key).copied()
+                    };
 
                     match cached_additional_cost {
                         None => {
@@ -129,6 +147,7 @@ fn recursive_best_path<const AGENTS: usize>(
                             new_positions[agent] = k;
                             let result = recursive_best_path::<AGENTS>(
                                 data,
+                                pos_maps,
                                 base_cost,
                                 &keys,
                                 &new_positions,
@@ -136,10 +155,13 @@ fn recursive_best_path<const AGENTS: usize>(
                                 dijkstra_cache,
                             );
                             let additional_cost = result - base_cost;
-                            cache.insert(cache_key, additional_cost);
+                            {
+                                let mut c = cache.write().expect("can't lock for write");
+                                c.insert(cache_key, additional_cost);
+                            }
                             result
                         }
-                        Some(&c) => base_cost + c,
+                        Some(c) => base_cost + c,
                     }
                 })
                 .min()
@@ -154,11 +176,12 @@ const DIJKSTRA_CACHE_SIZE: usize = 8092;
 fn calculate_p1(data: &Array2<u8>) -> i64 {
     recursive_best_path::<1>(
         &[&data.view()],
+        &[&make_pos_map(&data.view())],
         0,
         &[],
         &[b'@'],
-        &mut AHashMap::with_capacity(CACHE_SIZE),
-        &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
+        &Arc::new(RwLock::new(AHashMap::with_capacity(CACHE_SIZE))),
+        &Arc::new(RwLock::new(AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE))),
     )
 }
 
@@ -183,11 +206,17 @@ fn calculate_p2(mut data: Array2<u8>) -> i64 {
 
     recursive_best_path::<4>(
         &[&q1, &q2, &q3, &q4],
+        &[
+            &make_pos_map(&q1),
+            &make_pos_map(&q2),
+            &make_pos_map(&q3),
+            &make_pos_map(&q4),
+        ],
         0,
         &[],
         &[b'@', b'@', b'@', b'@'],
-        &mut AHashMap::with_capacity(CACHE_SIZE),
-        &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
+        &Arc::new(RwLock::new(AHashMap::with_capacity(CACHE_SIZE))),
+        &Arc::new(RwLock::new(AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE))),
     )
 }
 

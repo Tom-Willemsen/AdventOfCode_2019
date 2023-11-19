@@ -1,12 +1,6 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use std::cmp::max;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Vec<i64> {
     raw_inp.trim().lines().map(|s| s.parse().unwrap()).collect()

@@ -1,13 +1,7 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use mod_exp::mod_exp;
 use modinverse::modinverse;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 const CUT: u8 = b'c';
 const DEAL: u8 = b'd';

@@ -1,12 +1,6 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use ndarray::{s, ArrayView};
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Vec<u8> {
     raw_inp.trim().bytes().map(|x| x - b'0').collect()

@@ -1,13 +1,7 @@
-use clap::Parser;
+use advent_of_code_2019::{Cli, Parser};
 use itertools::Itertools;
 use rayon::prelude::*;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
 
 fn parse(raw_inp: &str) -> Vec<i64> {
     raw_inp
@@ -36,6 +30,7 @@ fn pat(offset: usize, pos: usize) -> i64 {
 
 fn apply_phase_p1(data: &[i64]) -> Vec<i64> {
     (0..data.len())
+        .into_par_iter()
         .map(|i| {
             data.iter()
                 .enumerate()
@@ -51,27 +46,15 @@ fn apply_phase_p1(data: &[i64]) -> Vec<i64> {
 /// So mask is skip 0s followed by all 1s
 /// So a simple cumulative sum starting at first 1
 /// can be used as a shortcut
-fn apply_phase_p2(data: &[i64]) -> Vec<i64> {
-    let mut cumsum = vec![];
-    let mut total_sum = 0;
+fn apply_phase_p2_inplace(data: &mut [i64]) {
+    let total_sum = data.iter().sum::<i64>();
+    let mut cumsum: i64 = 0;
 
-    data.iter().for_each(|x| {
-        total_sum += x;
-        cumsum.push(total_sum);
+    data.iter_mut().for_each(|itm| {
+        let result = (total_sum - cumsum).abs() % 10;
+        cumsum += *itm;
+        *itm = result;
     });
-
-    (0..data.len())
-        .into_par_iter()
-        .map(|i| {
-            let sum_to_i = if i >= 1 {
-                *cumsum.get(i - 1).unwrap()
-            } else {
-                0
-            };
-
-            (total_sum - sum_to_i).abs() % 10
-        })
-        .collect()
 }
 
 fn calculate_p1(data: &[i64]) -> String {
@@ -96,16 +79,19 @@ fn calculate_p2(data: &[i64]) -> String {
     )
     .unwrap();
 
-    let mut real_data = vec![];
+    debug_assert!(skip > data.len() * 10000 / 2);
 
-    for _ in 0..(data.len() * 10000 - skip).div_ceil(data.len()) {
+    let mut real_data = data[skip % data.len()..].to_vec();
+
+    let times = (data.len() * 10000 - skip) / data.len();
+    real_data.reserve(data.len() * times);
+
+    for _ in 0..times {
         real_data.extend(data);
     }
 
-    real_data = real_data[skip % data.len()..].to_vec();
-
     for _ in 0..100 {
-        real_data = apply_phase_p2(&real_data);
+        apply_phase_p2_inplace(&mut real_data);
     }
 
     real_data.iter().take(8).map(|x| x.to_string()).join("")
@@ -117,8 +103,7 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let p1 = calculate_p1(&data);
-    let p2 = calculate_p2(&data);
+    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(&data));
     println!("{}\n{}", p1, p2);
 }
 

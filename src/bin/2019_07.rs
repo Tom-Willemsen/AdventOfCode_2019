@@ -1,21 +1,8 @@
-use advent_of_code_2019::intcode::IntCodeState;
-use clap::Parser;
+use advent_of_code_2019::intcode::{parse_intcode_to_vec, IntCodeState};
+use advent_of_code_2019::{Cli, Parser};
 use itertools::Itertools;
+use rayon::prelude::*;
 use std::fs;
-
-#[derive(Parser)]
-struct Cli {
-    #[clap(short, long)]
-    input: String,
-}
-
-fn parse(raw_inp: &str) -> Vec<i64> {
-    raw_inp
-        .trim()
-        .split(',')
-        .map(|s| s.parse().unwrap())
-        .collect()
-}
 
 fn run_amplifier_p1(software: &[i64], input: i64, phase: i64) -> i64 {
     let mut prog: IntCodeState = software.into();
@@ -35,6 +22,7 @@ fn run_amplifier_sequence_p1(software: &[i64], phases: &[i64]) -> i64 {
 fn calculate_p1(software: &[i64]) -> i64 {
     (0..=4)
         .permutations(5)
+        .par_bridge()
         .map(|perm| run_amplifier_sequence_p1(software, &perm))
         .max()
         .expect("at least one item should exist")
@@ -71,6 +59,7 @@ fn run_amplifiers_p2(software: &[i64], phases: &[i64]) -> i64 {
 fn calculate_p2(software: &[i64]) -> i64 {
     (5..=9)
         .permutations(5)
+        .par_bridge()
         .map(|perm| run_amplifiers_p2(software, &perm))
         .max()
         .expect("at least one item should exist")
@@ -81,9 +70,8 @@ fn main() {
 
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
-    let nums: Vec<i64> = parse(&inp);
-    let p1 = calculate_p1(&nums);
-    let p2 = calculate_p2(&nums);
+    let inp_vec = parse_intcode_to_vec(&inp);
+    let (p1, p2) = rayon::join(|| calculate_p1(&inp_vec), || calculate_p2(&inp_vec));
     println!("{}\n{}", p1, p2);
 }
 
@@ -104,36 +92,51 @@ mod tests {
 
     #[test]
     fn test_p1_example_1() {
-        assert_eq!(calculate_p1(&parse(&EXAMPLE_DATA_P1_1)), 43210);
+        assert_eq!(
+            calculate_p1(&parse_intcode_to_vec(&EXAMPLE_DATA_P1_1)),
+            43210
+        );
     }
 
     #[test]
     fn test_p1_example_2() {
-        assert_eq!(calculate_p1(&parse(&EXAMPLE_DATA_P1_2)), 54321);
+        assert_eq!(
+            calculate_p1(&parse_intcode_to_vec(&EXAMPLE_DATA_P1_2)),
+            54321
+        );
     }
 
     #[test]
     fn test_p1_example_3() {
-        assert_eq!(calculate_p1(&parse(&EXAMPLE_DATA_P1_3)), 65210);
+        assert_eq!(
+            calculate_p1(&parse_intcode_to_vec(&EXAMPLE_DATA_P1_3)),
+            65210
+        );
     }
 
     #[test]
     fn test_p2_example_1() {
-        assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_P2_1)), 139629729);
+        assert_eq!(
+            calculate_p2(&parse_intcode_to_vec(&EXAMPLE_DATA_P2_1)),
+            139629729
+        );
     }
 
     #[test]
     fn test_p2_example_2() {
-        assert_eq!(calculate_p2(&parse(&EXAMPLE_DATA_P2_2)), 18216);
+        assert_eq!(
+            calculate_p2(&parse_intcode_to_vec(&EXAMPLE_DATA_P2_2)),
+            18216
+        );
     }
 
     #[test]
     fn test_p1_real() {
-        assert_eq!(calculate_p1(&parse(&REAL_DATA)), 11828);
+        assert_eq!(calculate_p1(&parse_intcode_to_vec(&REAL_DATA)), 11828);
     }
 
     #[test]
     fn test_p2_real() {
-        assert_eq!(calculate_p2(&parse(&REAL_DATA)), 1714298);
+        assert_eq!(calculate_p2(&parse_intcode_to_vec(&REAL_DATA)), 1714298);
     }
 }
