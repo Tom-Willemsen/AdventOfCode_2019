@@ -1,13 +1,19 @@
 use advent_of_code_2019::{Cli, Parser};
-use ahash::AHashMap;
+use ahash::{AHashMap, AHashSet};
 use mimalloc::MiMalloc;
 use ndarray::{s, Array2, ArrayView2};
 use std::collections::BinaryHeap;
 use std::fs;
-use std::cmp::min;
+use rayon::prelude::*;
 
 #[global_allocator]
 static ALLOCATOR: MiMalloc = MiMalloc;
+
+type PathCache<const AGENTS: usize> = AHashMap<(Vec<u8>, [u8; AGENTS], u8, usize), i64>;
+type DijkstraCache = AHashMap<(Vec<u8>, usize, u8), Vec<(u8, i64)>>;
+
+const CACHE_SIZE: usize = 32768;
+const DIJKSTRA_CACHE_SIZE: usize = 8092;
 
 fn parse(raw_inp: &str) -> Array2<u8> {
     let columns = raw_inp
@@ -35,10 +41,52 @@ fn position_of(data: &ArrayView2<u8>, ch: u8) -> (usize, usize) {
         .expect("can't find pos")
 }
 
-/// Dijkstra
-fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<(u8, i64)> {
+/// Dijkstra, but over a map of direct connections rather than the "raw" map.
+#[inline(never)]
+fn reachable_keys(data: &AHashMap<u8, Vec<(u8, i64)>>, held_keys: &[u8], start_at: u8) -> Vec<(u8, i64)> {
+    
     let mut heap = BinaryHeap::new();
-    let start_pos = position_of(data, start_at);
+    heap.push((0, start_at));
+
+    let mut costs: AHashMap<u8, i64> = AHashMap::with_capacity(8);
+
+    while let Some((cost, pos)) = heap.pop() {
+        let neighbours = data.get(&pos).expect("invalid pos");
+        
+        for (n_pos, n_cost) in neighbours.iter() {
+
+            if *n_pos == start_at {
+                continue;
+            }
+            
+            let is_closed_door = n_pos.is_ascii_uppercase()
+                && !held_keys.contains(&n_pos.to_ascii_lowercase());
+                
+            if is_closed_door {
+                continue;
+            }
+            
+            let next_cost = cost - n_cost;
+
+            if next_cost > *costs.get(n_pos).unwrap_or(&i64::MIN) {
+                heap.push((next_cost, *n_pos));
+                costs.insert(*n_pos, next_cost);
+            }
+        }
+    }
+    
+    let res = costs.into_iter()
+        .filter(|&(pos, _)| pos.is_ascii_lowercase() && !held_keys.contains(&pos))
+        .map(|(pos, cost)| (pos, -cost))
+        .collect();
+        
+    res
+}
+
+#[inline(never)]
+fn dijkstra(data: ArrayView2<u8>, start_pos: (usize, usize)) -> Vec<(u8, i64)> {
+    // Dijkstra over the "raw" map.
+    let mut heap = BinaryHeap::new();
     heap.push((0, start_pos));
 
     let mut costs: AHashMap<(usize, usize), i64> = AHashMap::with_capacity(1024);
@@ -53,27 +101,18 @@ fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<
             );
             let next_cost = cost - 1;
 
-            let next_tile = data.get(next_pos).expect("invalid next pos");
-            let is_wall = next_tile == &b'#';
+            let next_tile = *data.get(next_pos).expect("invalid next pos");
+            let is_wall = next_tile == b'#';
 
-            if is_wall {
-                continue;
-            }
-
-            let is_closed_door = next_tile.is_ascii_uppercase()
-                && !held_keys.contains(&next_tile.to_ascii_lowercase());
-
-            if is_closed_door {
+            if is_wall || next_pos == start_pos {
                 continue;
             }
 
             let next = (next_cost, next_pos);
 
             if next_cost > *costs.get(&next_pos).unwrap_or(&i64::MIN) {
-                let is_unheld_key =
-                    next_tile.is_ascii_lowercase() && !held_keys.contains(next_tile);
-                if is_unheld_key {
-                    result.push((*next_tile, -next_cost));
+                if next_tile != b'.' {
+                    result.push((next_tile, -next_cost));
                 } else {
                     heap.push(next);
                 }
@@ -85,26 +124,41 @@ fn reachable_keys(data: &ArrayView2<u8>, held_keys: &[u8], start_at: u8) -> Vec<
     result
 }
 
-type PathCache<const AGENTS: usize> = AHashMap<(Vec<u8>, [u8; AGENTS], u8, usize), i64>;
-type DijkstraCache = AHashMap<(Vec<u8>, usize, u8), Vec<(u8, i64)>>;
+// Costs to go from a node to it's directly reachable neighbouring nodes.
+#[inline(never)]
+fn make_cost_map(data: ArrayView2<u8>) -> AHashMap<u8, Vec<(u8, i64)>> {
+    data.indexed_iter()
+        .filter(|&(_, itm)| itm != &b'.' && itm != &b'#')
+        .map(|(idx, itm)| (*itm, dijkstra(data, idx)))
+        .collect()
+}
 
+#[inline(never)]
 fn recursive_best_path<const AGENTS: usize>(
-    data: &[&ArrayView2<u8>; AGENTS],
+    data: &[&AHashMap<u8, Vec<(u8, i64)>>; AGENTS],
     cost_so_far: i64,
     held_keys: &[u8],
     positions: &[u8; AGENTS],
     cache: &mut PathCache<AGENTS>,
     dijkstra_cache: &mut DijkstraCache,
-    best_cost: &mut i64,
 ) -> i64 {
     
-    if cost_so_far >= *best_cost {
-        return i64::MAX - cost_so_far;
-    }
-    
-    let result = (0..AGENTS)
+    (0..AGENTS)
         .filter_map(|agent| {
             let pos = positions[agent];
+            
+            let mut possible = false;
+            
+            for q in b'a'..=b'z' {
+                if data[agent].contains_key(&q) && !held_keys.contains(&q) {
+                    possible = true;
+                    break;
+                }
+            }
+            
+            if !possible {
+                return None;
+            }
 
             dijkstra_cache
                 .entry((held_keys.to_vec(), agent, pos))
@@ -116,10 +170,10 @@ fn recursive_best_path<const AGENTS: usize>(
                     keys.sort_unstable();
 
                     let base_cost = cost_so_far + cost;
-
-                    let cache_key = (held_keys.to_vec(), *positions, k, agent);
+                    
+                    let cache_key = (keys.clone(), *positions, k, agent);
                     let cached_additional_cost = cache.get(&cache_key);
-
+                    
                     match cached_additional_cost {
                         None => {
                             let mut new_positions = *positions;
@@ -131,7 +185,6 @@ fn recursive_best_path<const AGENTS: usize>(
                                 &new_positions,
                                 cache,
                                 dijkstra_cache,
-                                best_cost,
                             );
                             let additional_cost = result - base_cost;
                             cache.insert(cache_key, additional_cost);
@@ -143,31 +196,23 @@ fn recursive_best_path<const AGENTS: usize>(
                 .min()
         })
         .min()
-        .unwrap_or(cost_so_far);
-        
-    *best_cost = min(*best_cost, result);
-    result
+        .unwrap_or(cost_so_far)
 }
-
-const CACHE_SIZE: usize = 32768;
-const DIJKSTRA_CACHE_SIZE: usize = 8092;
 
 fn calculate_p1(data: &Array2<u8>) -> i64 {
     
-    let mut best_cost = i64::MAX;
-    
     recursive_best_path::<1>(
-        &[&data.view()],
+        &[&make_cost_map(data.view())],
         0,
         &[],
         &[b'@'],
         &mut AHashMap::with_capacity(CACHE_SIZE),
         &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
-        &mut best_cost,
     )
 }
 
 fn calculate_p2(mut data: Array2<u8>) -> i64 {
+    
     let entrance_pos = position_of(&data.view(), b'@');
 
     data[(entrance_pos.0 - 1, entrance_pos.1 - 1)] = b'@';
@@ -185,17 +230,14 @@ fn calculate_p2(mut data: Array2<u8>) -> i64 {
     let q2 = data.slice(s![entrance_pos.0.., 0..=entrance_pos.1]);
     let q3 = data.slice(s![0..=entrance_pos.0, entrance_pos.1..]);
     let q4 = data.slice(s![entrance_pos.0.., entrance_pos.1..]);
-    
-    let mut best_cost = i64::MAX;
 
     recursive_best_path::<4>(
-        &[&q1, &q2, &q3, &q4],
+        &[&make_cost_map(q1), &make_cost_map(q2), &make_cost_map(q3), &make_cost_map(q4)],
         0,
         &[],
         &[b'@', b'@', b'@', b'@'],
         &mut AHashMap::with_capacity(CACHE_SIZE),
         &mut AHashMap::with_capacity(DIJKSTRA_CACHE_SIZE),
-        &mut best_cost,
     )
 }
 
@@ -205,7 +247,8 @@ fn main() {
     let inp = fs::read_to_string(args.input).expect("can't open input file");
 
     let data = parse(&inp);
-    let (p1, p2) = rayon::join(|| calculate_p1(&data), || calculate_p2(data.clone()));
+    let p1 = calculate_p1(&data);
+    let p2 = calculate_p2(data);
     println!("{}\n{}", p1, p2);
 }
 
